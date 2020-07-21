@@ -1,7 +1,7 @@
 # Mudpie Sample Generator
 #
 # A script to automate sample creation from a mudpie. Randomly selects 
-# .5 to 4 second chunks of audio. Bandpass filters, compresses, normalizes, 
+# .25 to 3 second chunks of audio. Bandpass filters, compresses, normalizes, 
 # applies a random amplitude envelope, and declicks.
 #
 # Raymond Viviano
@@ -44,13 +44,19 @@ def process_options():
 
     Mandatory Options:
 
-        --i, --in      The mudpie, must be 16- or 24-bit int wav. No 32float yet
+        --i, --in      The mudpie, must be 16- or 24-bit int wav. No 32float 
+                       yet. Also, it needs to be *much* longer than 10 seconds 
+                       in length; otherwise, there is not much point in running
+                       this script.
 
-        --o, --out     Directory to save output wavs to
+        --o, --out     Directory to save output wavs to. If the provided 
+                       directory path does not exist, then the script will try 
+                       to create it.
 
-        --p, --pre     Filename prefix for all output wav samples
+        --p, --pre     Filename prefix for all output wav samples.
 
-        --n, --num     Number of samples to generate (max 400 for your own good) 
+        --n, --num     Number of samples to generate (it maxes out at 400 for 
+                       your own good). 
 
     Optional Options:
 
@@ -62,7 +68,7 @@ def process_options():
     opts, _ = getopt.getopt(sys.argv[1:], "h:", ["in=", "out=", "pre=", "num="])
 
     # Set variables to defaults
-    in_path, out_path, out_prefix, num_samps = None, None, None, 1
+    in_path, out_dir, prefix, num_samps = None, None, None, 1
 
     for opt, arg in opts:
         # Mandatory arguments
@@ -70,7 +76,7 @@ def process_options():
             if (arg is not None) and (isfile(abspath(arg))):
                 # Check that the file is a wav
                 try:
-                    wv_hdr = sndhdr.what(join(input_dir, f))
+                    wv_hdr = sndhdr.what(abspath(arg))
                     if wv_hdr is not None:
                         in_path = arg
                     else: 
@@ -84,11 +90,11 @@ def process_options():
 
         if opt == "--o" or opt == "--out": 
             if arg is not None:
-                out_path = arg
+                out_dir = arg
                 # If the specified out dir does not exist, try to make it
-                if not isdir(abspath(out_path)): 
+                if not isdir(abspath(out_dir)): 
                     try:
-                        os.makedirs(abspath(out_path))
+                        os.makedirs(abspath(out_dir))
                     except:
                         traceback.print_exc(file=sys.stdout)
                         print(os.linesep + 'Cannot create output directory.')
@@ -96,13 +102,13 @@ def process_options():
 
         if opt == "--p" or opt == "--pre":
             if arg is not None:
-                out_prefix = arg
+                prefix = arg
             else:
-                out_prefix = "randSamp"
+                prefix = "randSamp"
 
         if opt == "--n" or opt == "--num":
             if arg is not None:
-                num_samps = max(1, arg)
+                num_samps = max(1, int(arg))
                 num_samps = min(num_samps, 400)
             else:
                 num_samps = 1
@@ -114,30 +120,87 @@ def process_options():
 
 
     # Make sure that arguments exist for all mandatory options
-    if None in [in_path, out_path, out_prefix, num_samps]:
+    if None in [in_path, out_dir, prefix, num_samps]:
         print(os.linesep + 'Errors detected with mandatory options')
         print(usage)
         sys.exit(1)
 
     # Return options for audio processing
-    return in_path, out_path, out_prefix, num_samps
+    return in_path, out_dir, prefix, num_samps
 
 
 def load_wav(wave_filepath):
-    # TODO: Determine if I should scrap this function or extend it                                  
-    return wavio.read(wave_filepath)   
+    """Load wav data into np array and also return important wav parameters."""
+    wv = wavio.read(wave_filepath)
+    wav_data = wv.data 
+    num_frames = wav_data.shape[0]
+    framerate = wv.rate
+    samplewidth = wv.sampwidth                                   
+    return  wav_data, framerate, num_frames, samplewidth
+
+
+def check_wav(framerate, num_frames):
+    sample_length = convert_frames_to_ms(num_frames, framerate)
+    if sample_length < 10000:
+        raise WavError("Input wav needs to be longer than 10 seconds")
 
 
 def normalize_sample(sample):
     """Maximize sample amplitude."""
-    if sample.dtype = np.int16:
+    if sample.dtype == np.int16:
         normalized_sample = sample * 32767/np.max(np.abs(sample))
-    elif sample.dtype = np.int32:  # 24 bit wav casts to 32 bit np array 
+    elif sample.dtype == np.int32:  # 24 bit wav casts to 32 bit np array 
         normalized_sample = sample * 8,388,607/np.max(np.abs(sample))
 
     # TODO: Check that type is maintained
     return normalized_sample
-        
+
+
+def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
+    """
+    Extract a random sample of audio from the wav data that is as long
+    as the provided sample length.
+
+    Inputs:
+
+        wav_data:       numpy array of mudpie data
+
+        sample_length:  This is the sample length in ms
+
+        count:          If this hits 100, the provided wav may have too much 
+                        silence and the recursion may not break on its own. 
+                        Raise a WavError if this occurs.
+    Output:
+
+        sample:         Random sample from the provided mudpie to process more.    
+    """
+
+    # Increment the counter
+    count += 1
+
+    # Check if there have been 100 calls. If so, terminate in error.
+    if count >= 100:
+        msg = ("There is too much silence in the waveform to easily " +
+               "extract meaningful samples.")
+        raise WavError(msg)
+
+    # Get the sample_length of the random sample in frames
+    sample_frames = convert_ms_to_frames(sample_length, framerate)
+
+    # Get a random index to the wav_data array to slice at. Make sure that 
+    # the index plus the sample_frames do not exceed the last element of the 
+    # array for any out-of-bounds error.
+    slice_idx = np.random.randint(0, wav_data.shape[0] - sample_frames - 1)
+
+    # Extract the random sample
+    sample = wav_data[slice_idx:slice_idx+sample_frames, :]
+
+    # Make sure more than half the sample isn't a bunch of 0s. Else, recursion.
+    if np.count_nonzero(sample) < sample.shape[0]*sample.shape[1]/2:
+        sample = random_mudpie_sample(wav_data, sample_length, count)
+    
+    return sample
+  
 
 def convert_ms_to_frames(sample_length, framerate):
     """Convert sample length in milleconds to number of frames."""
@@ -163,15 +226,30 @@ def main():
         TODO: Write this docstring
     """
     # Get input wav filepath and output specifications
-    in_path, out_path, out_prefix, num_samps = process_options()
+    in_path, out_dir, prefix, num_samps = process_options()
 
-    # Load the wav file
-    wv = load_wav(in_path)
+    # Load the wav file and params
+    wav_data, framerate, num_frames, samplewidth = load_wav(in_path)
 
-    print(dir(wv))
+    # Generate random sample lengths between 250 and 3000 milliseconds
+    sample_lengths = np.random.randint(250, 3001, num_samps)
 
-    # Write output to a wav file
-    # wavio.write(outfile, wv2, rate=framerate, sampwidth=samplewidth)
+    # Generate random sample
+    for idx, sample_length in enumerate(sample_lengths):
+        # Random sample output filepath
+        zeropad_idx = "0"*(3 - len(str(idx+1))) + str(idx+1)
+        out_path = join(abspath(out_dir), prefix + "_" + zeropad_idx + ".wav")
+
+        # Extract a random sample from the mudpie
+        raw_sample = random_mudpie_sample(wav_data, sample_length, framerate)
+
+        # Declick the audio
+
+        # Temporary
+        proc_sample = raw_sample
+
+        # Write output to a wav file
+        wavio.write(out_path, proc_sample, rate=framerate, sampwidth=samplewidth)
 
 
 if __name__ == "__main__":
