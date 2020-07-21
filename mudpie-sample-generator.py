@@ -10,7 +10,7 @@
 
 # Dependencies - TODO: Not sure if all of these are needed yet.
 from __future__ import print_function, division
-import os, sys, getopt, traceback
+import os, sys, getopt, traceback, functools, warnings
 import wave, sndhdr, wavio
 import numpy as np 
 import multiprocessing as mp
@@ -27,6 +27,16 @@ __version__ = "0.0.1"
 # Class Definitions
 class WavError(Exception):
     pass
+
+# Decorator definitions
+def deprecated(func):
+    """Decorator to mark deprecated functions. Emits a warning on function call."""
+    @functools.wraps(func)
+    def new_func(*args, **kwargs):
+        warnings.warn("Call to deprecated function {}.".format(func.__name__),
+                      category=DeprecationWarning, stacklevel=2)
+        return func(*args, **kwargs)
+    return new_func
 
 
 # Function Definitions
@@ -224,6 +234,7 @@ def bandpass_sample(sample, framerate):
     return proc_sample
 
 
+@deprecated
 def demean(sample):
     """Center the waveform around 0. Demeans each channel separately"""
     if len(sample.shape) > 1:
@@ -232,8 +243,25 @@ def demean(sample):
         return sample - sample_mean[np.newaxis, :]
     else:
         # Data with only one axis supplied
-        sample_mean = sample.mean()
-    
+        return sample - sample.mean()
+
+
+# Note: Change this to default demean. Instead of passing dtype. Use the dtype 
+# of the input data. TODO: Redo these demean functions
+def demean_int(sample, dtype):
+    """ Center waveform around 0 but maintain integer type """
+    if len(sample.shape) > 1:
+        # Get the mean of each column
+        sample_mean = sample.mean(axis=0).astype(dtype)
+        sample -= sample_mean[np.newaxis, :]
+        sample = sample.astype(dtype, casting="unsafe")
+    else:
+        # Data with only one axis supplied
+        sample -= sample.mean().astype(dtype)
+        sample = sample.astype(dtype, casting="unsafe")
+
+    return sample
+
 
 def random_amplitude_envelope(sample):
     # TODO: SPLINES
@@ -358,6 +386,14 @@ def main():
         # Cast np array to either 16bit int or 24bit int. The audio processing
         # has occured with 64bit float precision up to this point.
         proc_sample = proc_sample.astype(raw_sample.dtype, casting="unsafe")
+
+        print(np.mean(proc_sample, axis=0))
+        
+        # Demean one final time - maintain int
+        proc_sample = demean_int(proc_sample, proc_sample.dtype)
+
+        print(proc_sample.dtype)
+        print(np.mean(proc_sample, axis=0).astype(proc_sample.dtype))
 
         # Write output to a wav file
         wavio.write(out_path, proc_sample, rate=framerate, sampwidth=samplewidth)
