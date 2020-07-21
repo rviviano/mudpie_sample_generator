@@ -217,12 +217,14 @@ def convert_frames_to_ms(num_frames, framerate):
 def bandpass_sample(sample, framerate):
     """ Determine bandbass filter coefficients for the provided 
         framerate and then return the sample after applying the filter
+
+        # TODO: Implement a more accurate highpass
     """
     nyquist = framerate * 0.5
     lowcut = 60.0/nyquist
-    highcut = 12500.0/nyquist 
+    highcut = 16500.0/nyquist 
     # Bandpass the audio
-    sos = butter(1, [lowcut, highcut], btype='bandpass', output='sos')
+    sos = butter(2, [lowcut, highcut], btype='bandpass', output='sos')
     proc_sample = sosfiltfilt(sos, sample, axis=0)
     # Not sure if this step is necessary
     proc_sample = detrend(proc_sample, axis=0)
@@ -230,8 +232,17 @@ def bandpass_sample(sample, framerate):
 
 
 def declick_sample(sample, framerate):
-    """Ramp up and ramp down the signal over the first and last 20 ms"""
-    pass
+    """Ramp up and ramp down the signal over the first and last 20 ms.
+       TODO: Consider splines over these linear windows.
+    """
+    num_frames = convert_ms_to_frames(20, framerate)
+    ramp_up = np.linspace(0,1,num_frames)[:,np.newaxis]
+    ramp_down = np.linspace(1,0,num_frames)[:,np.newaxis]
+    sample_start = sample[0:num_frames, :]
+    sample_end = sample[sample.shape[0]-num_frames:, :] 
+    sample[0:num_frames, :] = np.multiply(sample_start, ramp_up)
+    sample[sample.shape[0]-num_frames:, :] = np.multiply(sample_end, ramp_down)
+    return sample
 
 
 def main():
@@ -243,6 +254,9 @@ def main():
 
     # Load the wav file and params
     wav_data, framerate, num_frames, samplewidth = load_wav(in_path)
+
+    # Make sure the wav is long enough (> 10 seconds)
+    check_wav(framerate, num_frames)
 
     # Generate random sample lengths between 250 and 3000 milliseconds
     sample_lengths = np.random.randint(250, 3001, num_samps)
@@ -263,6 +277,7 @@ def main():
         proc_sample = normalize_sample(proc_sample, raw_sample.dtype)
 
         # Declick the audio
+        proc_sample = declick_sample(proc_sample, framerate)
 
         # Cast np array to either 16bit int or 24bit int.
         proc_sample = proc_sample.astype(raw_sample.dtype, casting="unsafe")
