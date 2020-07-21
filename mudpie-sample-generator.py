@@ -1,8 +1,8 @@
 # Mudpie Sample Generator
 #
 # A script to automate sample creation from a mudpie. Randomly selects 
-# .25 to 3 second chunks of audio. Bandpass filters, compresses, normalizes, 
-# applies a random amplitude envelope, and declicks.
+# .3 to 3 second chunks of audio. Bandpass filters, applies a random amplitude 
+# envelope to, normalizes, gates, demeans, detrends and declicks the samples.
 #
 # Raymond Viviano
 # July 20th, 2020
@@ -16,12 +16,13 @@ import numpy as np
 import multiprocessing as mp
 from os.path import isdir, isfile, abspath, join, basename, splitext, exists
 from copy import deepcopy
-from scipy.signal import resample, detrend, butter, sosfiltfilt
+from scipy.signal import detrend, butter, sosfiltfilt
 
-# Meh, updated whenever I feel like it
+# No real rhyme or reason to this
 __version__ = "0.0.1"
 
-# TODO: Implement test suite
+# TODO: Implement tests
+# TODO: Implement embarrassingly parallel processing
 
 # Class Definitions
 class WavError(Exception):
@@ -169,6 +170,7 @@ def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
         count:          If this hits 100, the provided wav may have too much 
                         silence and the recursion may not break on its own. 
                         Raise a WavError if this occurs.
+        
     Output:
 
         sample:         Random sample from the provided mudpie to process more.    
@@ -194,39 +196,92 @@ def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
     # Extract the random sample
     sample = wav_data[slice_idx:slice_idx+sample_frames, :]
 
-    # Make sure more than half the sample isn't a bunch of 0s. Else, recursion.
-    # TODO: This isn't a good enough way to check for silence becuase of a 
-    # noise floor that could be present. Need to gate the audio and then
-    # apply this check for better accuracy.
-    if np.count_nonzero(sample) < sample.shape[0]*sample.shape[1]/2:
+    # Gate sample, attempt to remove noise from "silent" sections
+    gated_samp = gate_audio(sample, framerate, wav_data.dtype)
+
+    # TODO: Make sure that audio starts within the first 4 ms of the sample
+
+    # TODO: Make sure the the first 50 ms contains 75% audio
+
+    # Make sure more than half the sample isn't mostly silence. Else, recursion.
+    if np.count_nonzero(gated_samp) < sample.shape[0]*sample.shape[1]/2:
         sample = random_mudpie_sample(wav_data, sample_length, count)
     
     return sample
   
 
 def bandpass_sample(sample, framerate):
-    """ Determine bandbass filter coefficients for the provided 
+    """ Determine bandbass filter second-order-sections for the provided 
         framerate and then return the sample after applying the filter
-
-        # TODO: This filter is kinda wonky. The lowpass component is fine
-        #       But I need to implement a more accurate highpass.
     """
     nyquist = framerate * 0.5
-    lowcut = 28.0/nyquist
-    highcut = 17500.0/nyquist 
+    lowcut = 30.0/nyquist
+    highcut = 18000.0/nyquist 
     # Define the filter
-    sos = butter(3, [lowcut, highcut], btype='bandpass', output='sos')
+    sos = butter(2, [lowcut, highcut], btype='bandpass', output='sos')
     # Bandpass the audio
     proc_sample = sosfiltfilt(sos, sample, axis=0)
-    # This step is most likely not necessary
-    proc_sample = detrend(proc_sample, axis=0)
     return proc_sample
 
+
+def demean(sample):
+    """Center the waveform around 0. Demeans each channel separately"""
+    if len(sample.shape) > 1:
+        # Get the mean of each column
+        sample_mean = sample.mean(axis=0)
+        return sample - sample_mean[np.newaxis, :]
+    else:
+        # Data with only one axis supplied
+        sample_mean = sample.mean()
+    
 
 def random_amplitude_envelope(sample):
-    # TODO
+    # TODO: SPLINES
     proc_sample = sample
     return proc_sample
+
+
+def gate_audio(sample, framerate, raw_dtype):
+    # Simple gate to try to get rid of the noise floor in the output audio.
+    # Vectorizing this seems non-trivial...
+    attack = .5
+    release = .9
+    envelope = 0.0
+    gain = 1.0
+
+    # Set threshold based on in/output bitdepth
+    if raw_dtype == np.int16:
+        threshold = 1600.0
+    else:
+        threshold = 20000.0
+
+    for i in range(0, sample.shape[0]-1):
+        # Calculate maxium absolute values across channels and cast to 
+        # a native python float so that it matches the envelope*release type
+        frame_max = float(np.max(np.abs(sample[i, :])))
+
+        # Calculate signal envelope at frame 
+        envelope = max(frame_max, envelope*release)
+
+        # If the envelope is below the threshold, target gain is zero
+        if envelope < threshold:
+            target_gain = 0.0
+        else:
+            target_gain = 1.0
+
+        # However, the actual gain applied by the limiter depends on the attack
+        # This ensures a smooth onset of the noise gate
+        gain = gain*attack + target_gain*(1-attack)
+        # If gain is < 1e-10, it's effectivly 0. Cap gain at 1. No boosting.
+        if gain < 0.0000000001:
+            gain = 0.0
+        elif gain > 1.0:
+            gain = 1.0
+
+        # Apply potential gain reduction to the frame 
+        sample[i, :] = gain * sample[i, :]
+    
+    return sample
 
 
 def normalize_sample(sample, raw_dtype):
@@ -235,7 +290,7 @@ def normalize_sample(sample, raw_dtype):
     if raw_dtype == np.int16:
         ratio = 32767/np.max(np.abs(sample))
     elif raw_dtype == np.int32:  # 24 bit wav casts to 32 bit np array 
-        ratio = 8388607/np.max(np.abs(sample))
+        ratio = 8388607/np.max(np.abs(sample)) # Treat max as 24 int signed limit
     
     normalized_sample = ratio * sample
 
@@ -243,10 +298,10 @@ def normalize_sample(sample, raw_dtype):
 
 
 def declick_sample(sample, framerate):
-    """Ramp up and ramp down the signal over the first and last 20 ms.
+    """Ramp up and ramp down the signal over the first and last 10 ms.
        TODO: Consider splines over these linear windows.
     """
-    num_frames = convert_ms_to_frames(20, framerate)
+    num_frames = convert_ms_to_frames(10, framerate)
     ramp_up = np.linspace(0,1,num_frames)[:,np.newaxis]
     ramp_down = np.linspace(1,0,num_frames)[:,np.newaxis]
     sample_start = sample[0:num_frames, :]
@@ -270,7 +325,7 @@ def main():
     check_wav(framerate, num_frames)
 
     # Generate random sample lengths between 250 and 3000 milliseconds
-    sample_lengths = np.random.randint(250, 3001, num_samps)
+    sample_lengths = np.random.randint(300, 3001, num_samps)
 
     # Generate random sample
     for idx, sample_length in enumerate(sample_lengths):
@@ -284,16 +339,24 @@ def main():
         # Bandpass the audio
         proc_sample = bandpass_sample(raw_sample, framerate)
 
-        # Generate randomish amplitude envelope and apply to audio
-        proc_sample = random_amplitude_envelope(proc_sample)
+        # # Generate randomish amplitude envelope and apply to audio
+        # proc_sample = random_amplitude_envelope(proc_sample)
 
         # Normalize the audio
         proc_sample = normalize_sample(proc_sample, raw_sample.dtype)
 
+        # Gate the Audio
+        proc_sample = gate_audio(proc_sample, framerate, raw_sample.dtype)
+
+        # Demean and detrend audio
+        proc_sample = demean(proc_sample)
+        proc_sample = detrend(proc_sample, axis=0)
+
         # Declick the audio
         proc_sample = declick_sample(proc_sample, framerate)
 
-        # Cast np array to either 16bit int or 24bit int.
+        # Cast np array to either 16bit int or 24bit int. The audio processing
+        # has occured with 64bit float precision up to this point.
         proc_sample = proc_sample.astype(raw_sample.dtype, casting="unsafe")
 
         # Write output to a wav file
