@@ -212,12 +212,13 @@ def bandpass_sample(sample, framerate):
         #       But I need to implement a more accurate highpass.
     """
     nyquist = framerate * 0.5
-    lowcut = 60.0/nyquist
-    highcut = 16500.0/nyquist 
+    lowcut = 28.0/nyquist
+    highcut = 17500.0/nyquist 
+    # Define the filter
+    sos = butter(3, [lowcut, highcut], btype='bandpass', output='sos')
     # Bandpass the audio
-    sos = butter(2, [lowcut, highcut], btype='bandpass', output='sos')
     proc_sample = sosfiltfilt(sos, sample, axis=0)
-    # Not sure if this step is necessary
+    # This step is most likely not necessary
     proc_sample = detrend(proc_sample, axis=0)
     return proc_sample
 
