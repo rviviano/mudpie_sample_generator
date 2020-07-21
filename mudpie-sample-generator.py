@@ -13,10 +13,10 @@ from __future__ import print_function, division
 import os, sys, getopt, traceback
 import wave, sndhdr, wavio
 import numpy as np 
-import scipy.signal
 import multiprocessing as mp
 from os.path import isdir, isfile, abspath, join, basename, splitext, exists
 from copy import deepcopy
+from scipy.signal import resample, detrend, butter, sosfiltfilt
 
 # Meh, updated whenever I feel like it
 __version__ = "0.0.1"
@@ -145,14 +145,16 @@ def check_wav(framerate, num_frames):
         raise WavError("Input wav needs to be longer than 10 seconds")
 
 
-def normalize_sample(sample):
+def normalize_sample(sample, raw_dtype):
     """Maximize sample amplitude."""
-    if sample.dtype == np.int16:
-        normalized_sample = sample * 32767/np.max(np.abs(sample))
-    elif sample.dtype == np.int32:  # 24 bit wav casts to 32 bit np array 
-        normalized_sample = sample * 8,388,607/np.max(np.abs(sample))
 
-    # TODO: Check that type is maintained
+    if raw_dtype == np.int16:
+        ratio = 32767/np.max(np.abs(sample))
+    elif raw_dtype == np.int32:  # 24 bit wav casts to 32 bit np array 
+        ratio = 8388607/np.max(np.abs(sample))
+    
+    normalized_sample = ratio * sample
+
     return normalized_sample
 
 
@@ -212,12 +214,23 @@ def convert_frames_to_ms(num_frames, framerate):
     return int(num_frames * 1000.0/framerate)
 
 
+def bandpass_sample(sample, framerate):
+    """ Determine bandbass filter coefficients for the provided 
+        framerate and then return the sample after applying the filter
+    """
+    nyquist = framerate * 0.5
+    lowcut = 60.0/nyquist
+    highcut = 12500.0/nyquist 
+    # Bandpass the audio
+    sos = butter(1, [lowcut, highcut], btype='bandpass', output='sos')
+    proc_sample = sosfiltfilt(sos, sample, axis=0)
+    # Not sure if this step is necessary
+    proc_sample = detrend(proc_sample, axis=0)
+    return proc_sample
+
+
 def declick_sample(sample, framerate):
-    pass
-
-
-def process_wav():
-    # TODO
+    """Ramp up and ramp down the signal over the first and last 20 ms"""
     pass
 
 
@@ -243,14 +256,23 @@ def main():
         # Extract a random sample from the mudpie
         raw_sample = random_mudpie_sample(wav_data, sample_length, framerate)
 
+        # Bandpass the audio
+        proc_sample = bandpass_sample(raw_sample, framerate)
+
+        # Normalize the audio
+        proc_sample = normalize_sample(proc_sample, raw_sample.dtype)
+
         # Declick the audio
 
-        # Temporary
-        proc_sample = raw_sample
+        # Cast np array to either 16bit int or 24bit int.
+        proc_sample = proc_sample.astype(raw_sample.dtype, casting="unsafe")
 
         # Write output to a wav file
         wavio.write(out_path, proc_sample, rate=framerate, sampwidth=samplewidth)
 
+        # Temporary for comparing filtering, etc. with raw random sample
+        raw_path = join(abspath(out_dir), "_raw_" + zeropad_idx + ".wav")
+        wavio.write(raw_path, raw_sample, rate=framerate, sampwidth=samplewidth)
 
 if __name__ == "__main__":
     main()
