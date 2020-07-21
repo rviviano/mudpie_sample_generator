@@ -145,17 +145,14 @@ def check_wav(framerate, num_frames):
         raise WavError("Input wav needs to be longer than 10 seconds")
 
 
-def normalize_sample(sample, raw_dtype):
-    """Maximize sample amplitude."""
+def convert_ms_to_frames(sample_length, framerate):
+    """Convert sample length in milleconds to number of frames."""
+    return int(framerate * (sample_length/1000.0))
 
-    if raw_dtype == np.int16:
-        ratio = 32767/np.max(np.abs(sample))
-    elif raw_dtype == np.int32:  # 24 bit wav casts to 32 bit np array 
-        ratio = 8388607/np.max(np.abs(sample))
-    
-    normalized_sample = ratio * sample
 
-    return normalized_sample
+def convert_frames_to_ms(num_frames, framerate):
+    """Convert number of frames to sample length in milleconds."""
+    return int(num_frames * 1000.0/framerate)
 
 
 def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
@@ -198,27 +195,21 @@ def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
     sample = wav_data[slice_idx:slice_idx+sample_frames, :]
 
     # Make sure more than half the sample isn't a bunch of 0s. Else, recursion.
+    # TODO: This isn't a good enough way to check for silence becuase of a 
+    # noise floor that could be present. Need to gate the audio and then
+    # apply this check for better accuracy.
     if np.count_nonzero(sample) < sample.shape[0]*sample.shape[1]/2:
         sample = random_mudpie_sample(wav_data, sample_length, count)
     
     return sample
   
 
-def convert_ms_to_frames(sample_length, framerate):
-    """Convert sample length in milleconds to number of frames."""
-    return int(framerate * (sample_length/1000.0))
-
-
-def convert_frames_to_ms(num_frames, framerate):
-    """Convert number of frames to sample length in milleconds."""
-    return int(num_frames * 1000.0/framerate)
-
-
 def bandpass_sample(sample, framerate):
     """ Determine bandbass filter coefficients for the provided 
         framerate and then return the sample after applying the filter
 
-        # TODO: Implement a more accurate highpass
+        # TODO: This filter is kinda wonky. The lowpass component is fine
+        #       But I need to implement a more accurate highpass.
     """
     nyquist = framerate * 0.5
     lowcut = 60.0/nyquist
@@ -229,6 +220,25 @@ def bandpass_sample(sample, framerate):
     # Not sure if this step is necessary
     proc_sample = detrend(proc_sample, axis=0)
     return proc_sample
+
+
+def random_amplitude_envelope(sample):
+    # TODO
+    proc_sample = sample
+    return proc_sample
+
+
+def normalize_sample(sample, raw_dtype):
+    """Maximize sample amplitude."""
+
+    if raw_dtype == np.int16:
+        ratio = 32767/np.max(np.abs(sample))
+    elif raw_dtype == np.int32:  # 24 bit wav casts to 32 bit np array 
+        ratio = 8388607/np.max(np.abs(sample))
+    
+    normalized_sample = ratio * sample
+
+    return normalized_sample
 
 
 def declick_sample(sample, framerate):
@@ -272,6 +282,9 @@ def main():
 
         # Bandpass the audio
         proc_sample = bandpass_sample(raw_sample, framerate)
+
+        # Generate randomish amplitude envelope and apply to audio
+        proc_sample = random_amplitude_envelope(proc_sample)
 
         # Normalize the audio
         proc_sample = normalize_sample(proc_sample, raw_sample.dtype)
