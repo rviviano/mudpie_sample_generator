@@ -279,9 +279,14 @@ def generate_spline_curve(ctrls_x, ctrls_y, start, stop, n):
     # Return the curve
     return spline(np.linspace(start, stop, n))
 
-def smooth_hann(x, window_len=10, window='hanning'):
-    """Convolve signal (or envelope segments) with scaled window to smooth"""
 
+def smooth_hann(x):
+    """Convolve signal (or envelope segments) with scaled window to smooth"""
+    window_len = 50
+    s = np.r_[x[window_len-1:0:-1],x,x[-1:-window_len:-1]] # pad with reflected copies of signal
+    w = np.hanning(window_len)
+    y = np.convolve(w/w.sum(), s, mode='valid')
+    return y[(int(window_len/2)-1):-(int(window_len/2))] # remove the padding when returning the convolved signal
 
 
 def generate_amp_envelope(num_frames):
@@ -290,7 +295,7 @@ def generate_amp_envelope(num_frames):
     first_inflect_x = randint(num_frames*.0625, num_frames*.5)
     first_inflect_y = 1.0
     # Set second inflection between first inflection and ~3/4 sample length
-    second_inflect_x = randint(first_inflect_x+10, num_frames*.75+10)
+    second_inflect_x = randint(first_inflect_x+50, num_frames*.75+10)
     second_inflect_y = randint(250, 750)*.001
 
     # Attack - Random, monotonically increasing control points
@@ -326,12 +331,15 @@ def generate_amp_envelope(num_frames):
 
     envelope = np.concatenate((attack, sus_decay, release))
 
-    # Smooth around inflections to get rid of harsh edges between random curves
+    # Set first and last 10 frames to 0 before smoothing
+    envelope[:10] = np.zeros(10)
+    envelope[-10:] = np.zeros(10)
+
+    # Smooth to get rid of harsh edges between random curves
+    envelope = smooth_hann(envelope)
 
     # Clip the vector (make sure everything is between 0 and 1)
-    # envelope = np.clip(envelope)
-
-    #TODO: Maybe normalize the envelope rather than clip it?
+    envelope = np.clip(envelope, 0, 1)
 
     return envelope[:, np.newaxis]
 
@@ -340,7 +348,8 @@ def apply_random_amp_envelope(sample):
     """
         Apply a random amplitude envelope to the sample
     """
-    proc_sample = sample
+    envelope = generate_amp_envelope(sample.shape[0])
+    proc_sample = np.multiply(sample, envelope)
     return proc_sample
 
 
