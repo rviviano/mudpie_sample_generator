@@ -19,8 +19,8 @@ from mudpie_sample_generator import generate_amp_envelope
 
 
 def plot_amp_envelope():
-    x = np.linspace(0, 2000, 2001)[:,np.newaxis]
-    y = generate_amp_envelope(2001)
+    x = np.linspace(0, 13230, 13231)[:,np.newaxis]
+    y = generate_amp_envelope(13231)
     plt.plot(x,y)
     plt.show()
 
