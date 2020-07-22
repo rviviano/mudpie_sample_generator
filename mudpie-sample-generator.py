@@ -196,6 +196,7 @@ def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
         raise WavError(msg)
 
     # Get the sample_length of the random sample in frames
+    # TODO: Should probably pull this outside of the recursion
     sample_frames = convert_ms_to_frames(sample_length, framerate)
 
     # Get a random index to the wav_data array to slice at. Make sure that 
@@ -209,14 +210,14 @@ def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
     # Gate sample, attempt to remove noise from "silent" sections
     gated_samp = gate_audio(sample, framerate, wav_data.dtype)
 
-    # TODO: Make sure that audio starts within the first 4 ms of the sample
+    # TODO: Make sure that audio starts within the first 10 ms of the sample
 
     # TODO: Make sure the the first 50 ms contains 75% audio
 
     # Make sure more than half the sample isn't mostly silence. Else, recursion.
     if np.count_nonzero(gated_samp) < sample.shape[0]*sample.shape[1]/2:
-        sample = random_mudpie_sample(wav_data, sample_length, count)
-    
+        sample = random_mudpie_sample(wav_data, sample_length, framerate, count)
+
     return sample
   
 
@@ -226,30 +227,25 @@ def bandpass_sample(sample, framerate):
     """
     nyquist = framerate * 0.5
     lowcut = 30.0/nyquist
-    highcut = 18000.0/nyquist 
-    # Define the filter
-    sos = butter(2, [lowcut, highcut], btype='bandpass', output='sos')
-    # Bandpass the audio
-    proc_sample = sosfiltfilt(sos, sample, axis=0)
+    highcut = 18000.0/nyquist
+    # TODO: Figure out the minimum sample_length that will work with this
+    try: 
+        # Define the filter
+        sos = butter(2, [lowcut, highcut], btype='bandpass', output='sos')
+        # Bandpass the audio
+        proc_sample = sosfiltfilt(sos, sample, axis=0)
+    except ValueError:
+        # Some of the samples may be too small to apply this filter on...
+        traceback.print_exc(file=sys.stdout)
+        # Just return the original sample
+        return sample
+
     return proc_sample
 
 
-@deprecated
 def demean(sample):
-    """Center the waveform around 0. Demeans each channel separately"""
-    if len(sample.shape) > 1:
-        # Get the mean of each column
-        sample_mean = sample.mean(axis=0)
-        return sample - sample_mean[np.newaxis, :]
-    else:
-        # Data with only one axis supplied
-        return sample - sample.mean()
-
-
-# Note: Change this to default demean. Instead of passing dtype. Use the dtype 
-# of the input data. TODO: Redo these demean functions
-def demean_int(sample, dtype):
-    """ Center waveform around 0 but maintain integer type """
+    """Center waveform at 0 and maintain the input array's original type."""
+    dtype = sample.dtype
     if len(sample.shape) > 1:
         # Get the mean of each column
         sample_mean = sample.mean(axis=0).astype(dtype)
@@ -355,6 +351,8 @@ def main():
     # Generate random sample lengths between 250 and 3000 milliseconds
     sample_lengths = np.random.randint(300, 3001, num_samps)
 
+    print(sample_lengths)
+
     # Generate random sample
     for idx, sample_length in enumerate(sample_lengths):
         # Random sample output filepath
@@ -363,6 +361,8 @@ def main():
 
         # Extract a random sample from the mudpie
         raw_sample = random_mudpie_sample(wav_data, sample_length, framerate)
+        print(os.linesep)
+        print(idx)
 
         # Bandpass the audio
         proc_sample = bandpass_sample(raw_sample, framerate)
@@ -379,21 +379,16 @@ def main():
         # Demean and detrend audio
         proc_sample = demean(proc_sample)
         proc_sample = detrend(proc_sample, axis=0)
-
+        
         # Declick the audio
         proc_sample = declick_sample(proc_sample, framerate)
 
         # Cast np array to either 16bit int or 24bit int. The audio processing
         # has occured with 64bit float precision up to this point.
         proc_sample = proc_sample.astype(raw_sample.dtype, casting="unsafe")
-
-        print(np.mean(proc_sample, axis=0))
         
-        # Demean one final time - maintain int
-        proc_sample = demean_int(proc_sample, proc_sample.dtype)
-
-        print(proc_sample.dtype)
-        print(np.mean(proc_sample, axis=0).astype(proc_sample.dtype))
+        # Demean one final time - Maintain int dtype though.
+        proc_sample = demean(proc_sample)
 
         # Write output to a wav file
         wavio.write(out_path, proc_sample, rate=framerate, sampwidth=samplewidth)
