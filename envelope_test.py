@@ -6,18 +6,28 @@
 # Raymond Viviano
 # July 22nd, 2020
 
+import os, sys
 import numpy as np
 import scipy
 import matplotlib.pyplot as plt
-from .mudpie-sample-generator import generate_amp_envelope
+from os.path import abspath, realpath, dirname
+
+# Import mudpie_sample_generator to access random envelope generation
+scriptpath = abspath(dirname(realpath(__file__)))
+sys.path.append(scriptpath)
+from mudpie_sample_generator import generate_amp_envelope
 
 
-def plot_amp_envelope(envelope):
-    pass
+def plot_amp_envelope():
+    x = np.linspace(0, 5000, 5001)[:,np.newaxis]
+    y = generate_amp_envelope(5001)
+    plt.plot(x,y)
+    plt.show()
 
 
 def main():
-    pass
+    for i in range(10):
+        plot_amp_envelope()
 
 
 if __name__ == "__main__":
