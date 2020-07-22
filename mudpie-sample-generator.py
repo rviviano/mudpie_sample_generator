@@ -225,20 +225,14 @@ def bandpass_sample(sample, framerate):
     """ Determine bandbass filter second-order-sections for the provided 
         framerate and then return the sample after applying the filter
     """
+    # Convenience parameters
     nyquist = framerate * 0.5
     lowcut = 30.0/nyquist
     highcut = 18000.0/nyquist
-    # TODO: Figure out the minimum sample_length that will work with this
-    try: 
-        # Define the filter
-        sos = butter(2, [lowcut, highcut], btype='bandpass', output='sos')
-        # Bandpass the audio
-        proc_sample = sosfiltfilt(sos, sample, axis=0)
-    except ValueError:
-        # Some of the samples may be too small to apply this filter on...
-        traceback.print_exc(file=sys.stdout)
-        # Just return the original sample
-        return sample
+    # Define the filter
+    sos = butter(2, [lowcut, highcut], btype='bandpass', output='sos')
+    # Bandpass the audio
+    proc_sample = sosfiltfilt(sos, sample, axis=0)
 
     return proc_sample
 
