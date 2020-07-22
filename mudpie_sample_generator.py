@@ -282,7 +282,7 @@ def generate_spline_curve(ctrls_x, ctrls_y, start, stop, n):
 
 def smooth_hann(x):
     """Convolve signal (or envelope segments) with scaled window to smooth"""
-    window_len = 50
+    window_len = 200
     s = np.r_[x[window_len-1:0:-1],x,x[-1:-window_len:-1]] # pad with reflected copies of signal
     w = np.hanning(window_len)
     y = np.convolve(w/w.sum(), s, mode='valid')
@@ -331,9 +331,9 @@ def generate_amp_envelope(num_frames):
 
     envelope = np.concatenate((attack, sus_decay, release))
 
-    # Set first and last 10 frames to 0 before smoothing
-    envelope[:10] = np.zeros(10)
-    envelope[-10:] = np.zeros(10)
+    # Set first and last 100 frames to 0 before smoothing
+    envelope[:100] = np.zeros(100)
+    envelope[-100:] = np.zeros(100)
 
     # Smooth to get rid of harsh edges between random curves
     envelope = smooth_hann(envelope)
@@ -453,8 +453,8 @@ def main():
         # Bandpass the audio
         proc_sample = bandpass_sample(raw_sample, framerate)
 
-        # # Generate randomish amplitude envelope and apply to audio
-        # proc_sample = random_amplitude_envelope(proc_sample)
+        # Generate randomish amplitude envelope and apply to audio
+        proc_sample = apply_random_amp_envelope(proc_sample)
 
         # Normalize the audio
         proc_sample = normalize_sample(proc_sample, raw_sample.dtype)
