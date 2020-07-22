@@ -196,7 +196,10 @@ def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
         raise WavError(msg)
 
     # Get the sample_length of the random sample in frames
-    # TODO: Should probably pull this outside of the recursion
+    # TODO: Consider pulling this outside of the recursion and 
+    # passing to the function. Though this might be an unnecessary 
+    # optimization as the number of recursive calls is low for 
+    # good mudpies
     sample_frames = convert_ms_to_frames(sample_length, framerate)
 
     # Get a random index to the wav_data array to slice at. Make sure that 
@@ -223,7 +226,7 @@ def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
 
 def bandpass_sample(sample, framerate):
     """ Determine bandbass filter second-order-sections for the provided 
-        framerate and then return the sample after applying the filter
+        framerate and then return the sample after applying the filter.
     """
     # Convenience parameters
     nyquist = framerate * 0.5
@@ -241,7 +244,7 @@ def demean(sample):
     """Center waveform at 0 and maintain the input array's original type."""
     dtype = sample.dtype
     if len(sample.shape) > 1:
-        # Get the mean of each column
+        # Get the mean of each channel separately
         sample_mean = sample.mean(axis=0).astype(dtype)
         sample -= sample_mean[np.newaxis, :]
         sample = sample.astype(dtype, casting="unsafe")
@@ -253,6 +256,10 @@ def demean(sample):
     return sample
 
 
+def generate_amp_envelope(num_frames):
+    pass
+
+
 def random_amplitude_envelope(sample):
     # TODO: SPLINES
     proc_sample = sample
@@ -260,8 +267,12 @@ def random_amplitude_envelope(sample):
 
 
 def gate_audio(sample, framerate, raw_dtype):
-    # Simple gate to try to get rid of the noise floor in the output audio.
-    # Vectorizing this seems non-trivial...
+    """
+        Simple gate to try to get rid of the noise floor in the output audio.
+        Vectorizing this seems non-trivial. It might be one of the slowest 
+        parts of the script. TODO: Time this function and compare it to
+        other functions. This might be the first place to optimize.
+    """
     attack = .5
     release = .9
     envelope = 0.0
@@ -269,8 +280,8 @@ def gate_audio(sample, framerate, raw_dtype):
 
     # Set threshold based on in/output bitdepth
     if raw_dtype == np.int16:
-        threshold = 1600.0
-    else:
+        threshold = 1600.0 # TODO: This is still an untested threshold
+    else: # 24-bit
         threshold = 20000.0
 
     for i in range(0, sample.shape[0]-1):
@@ -345,8 +356,6 @@ def main():
     # Generate random sample lengths between 250 and 3000 milliseconds
     sample_lengths = np.random.randint(300, 3001, num_samps)
 
-    print(sample_lengths)
-
     # Generate random sample
     for idx, sample_length in enumerate(sample_lengths):
         # Random sample output filepath
@@ -355,8 +364,6 @@ def main():
 
         # Extract a random sample from the mudpie
         raw_sample = random_mudpie_sample(wav_data, sample_length, framerate)
-        print(os.linesep)
-        print(idx)
 
         # Bandpass the audio
         proc_sample = bandpass_sample(raw_sample, framerate)
