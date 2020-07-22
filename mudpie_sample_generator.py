@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Mudpie Sample Generator
 #
 # A script to automate sample creation from a mudpie. Randomly selects 
@@ -8,7 +10,7 @@
 # July 20th, 2020
 # rayvivianomusic@gmail.com
 
-# Dependencies - TODO: Not sure if all of these are needed yet.
+# Dependencies - TODO: Not sure if all of these will be needed yet.
 from __future__ import print_function, division
 import os, sys, getopt, traceback, functools, warnings
 import wave, sndhdr, wavio
@@ -16,7 +18,9 @@ import numpy as np
 import multiprocessing as mp
 from os.path import isdir, isfile, abspath, join, basename, splitext, exists
 from copy import deepcopy
-from scipy.signal import detrend, butter, sosfiltfilt
+from scipy.signal import detrend, butter, sosfiltfilt, savgol_filter
+from scipy.interpolate import BSpline, splrep
+from numpy.random import randint
 
 # No real rhyme or reason to this
 __version__ = "0.0.1"
@@ -169,13 +173,17 @@ def convert_frames_to_ms(num_frames, framerate):
 def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
     """
     Extract a random sample of audio from the wav data that is as long
-    as the provided sample length.
+    as the provided sample length. Check if the sample starts with silence
+    or contains too much silence after applying a noise gate. If too silent,
+    this function calls itself recursively.
 
     Inputs:
 
-        wav_data:       numpy array of mudpie data
+        wav_data:       numpy array of complete mudpie data
 
         sample_length:  This is the sample length in ms
+
+        framerate:      Audio sample rate. Usually 44.1 or 48 khz.
 
         count:          If this hits 100, the provided wav may have too much 
                         silence and the recursion may not break on its own. 
@@ -196,16 +204,11 @@ def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
         raise WavError(msg)
 
     # Get the sample_length of the random sample in frames
-    # TODO: Consider pulling this outside of the recursion and 
-    # passing to the function. Though this might be an unnecessary 
-    # optimization as the number of recursive calls is low for 
-    # good mudpies
     sample_frames = convert_ms_to_frames(sample_length, framerate)
 
-    # Get a random index to the wav_data array to slice at. Make sure that 
-    # the index plus the sample_frames do not exceed the last element of the 
-    # array for any out-of-bounds error.
-    slice_idx = np.random.randint(0, wav_data.shape[0] - sample_frames - 1)
+    # Get a random index to the wav_data array to slice at. Make sure the 
+    # index plus sample_frames don't exceed the last element of the array 
+    slice_idx = randint(0, wav_data.shape[0] - sample_frames - 1)
 
     # Extract the random sample
     sample = wav_data[slice_idx:slice_idx+sample_frames, :]
@@ -213,11 +216,23 @@ def random_mudpie_sample(wav_data, sample_length, framerate, count=0):
     # Gate sample, attempt to remove noise from "silent" sections
     gated_samp = gate_audio(sample, framerate, wav_data.dtype)
 
-    # TODO: Make sure that audio starts within the first 10 ms of the sample
+    # TODO: The gate function might not be good enough to test in this way.
+    # UPDATE: Tweaked the gate params to make it faster. Maybe it will work
+    # better now???
+    # Make sure there is audio within the first 10 ms of the sample
+    frames_10ms = convert_ms_to_frames(10, framerate)
+    sample_10_ms = gated_samp[:frames_10ms, :]
+    if 0 in sample_10_ms:
+        sample = random_mudpie_sample(wav_data, sample_length, framerate, count)
+    
+    # TODO: The gate function might not be good enough for this
+    # Make sure the the first 50 ms contains 75% audio
+    frames_50ms = convert_ms_to_frames(50, framerate)
+    sample_50_ms = gated_samp[:frames_50ms, :]
+    if np.count_nonzero(sample_50_ms) < np.sum(sample_50_ms.shape)*.25:
+        sample = random_mudpie_sample(wav_data, sample_length, framerate, count)
 
-    # TODO: Make sure the the first 50 ms contains 75% audio
-
-    # Make sure more than half the sample isn't mostly silence. Else, recursion.
+    # Make sure >50% of the sample isn't silence
     if np.count_nonzero(gated_samp) < sample.shape[0]*sample.shape[1]/2:
         sample = random_mudpie_sample(wav_data, sample_length, framerate, count)
 
@@ -256,12 +271,75 @@ def demean(sample):
     return sample
 
 
+def generate_spline_curve(ctrls_x, ctrls_y, start, stop, n):
+    # Find the knots and coefficients of 1-D curve B-spline representation 
+    t, c, k = splrep(ctrls_x, ctrls_y, s=2, k=3)
+    # Create B-spline object
+    spline = BSpline(t, c, k, extrapolate=False)
+    # Return the curve
+    return spline(np.linspace(start, stop, n))
+
+def smooth_hann(x, window_len=10, window='hanning'):
+    """Convolve signal (or envelope segments) with scaled window to smooth"""
+
+
+
 def generate_amp_envelope(num_frames):
-    pass
+    """ Generate a random amplitude envelope to shape sample dynamics."""
+    # Set first inflection point between 1/16 and 1/2 sample length 
+    first_inflect_x = randint(num_frames*.0625, num_frames*.5)
+    first_inflect_y = 1.0
+    # Set second inflection between first inflection and ~3/4 sample length
+    second_inflect_x = randint(first_inflect_x+10, num_frames*.75+10)
+    second_inflect_y = randint(250, 750)*.001
+
+    # Attack - Random, monotonically increasing control points
+    ctrls_x = np.sort(randint(1, first_inflect_x-1, 50))
+    ctrls_y = np.sort(randint(1, 999, 50)*.001)
+    ctrls_x[0], ctrls_y[0] = (0, 0)
+    ctrls_x[-1], ctrls_y[-1] = (first_inflect_x, first_inflect_y)
+    
+    attack = generate_spline_curve(ctrls_x, ctrls_y, 0, first_inflect_x, 
+                                   first_inflect_x)
+
+    # Sustain/Decay - same method as for the attack, but monotonic decrease
+    ctrls_x = np.sort(randint(1, second_inflect_x-first_inflect_x-1, 30))
+    ctrls_y = np.sort(randint(int(second_inflect_y*1000)-1, 999, 30)*.001)[::-1]
+    ctrls_x[0], ctrls_y[0] = (0, 1.0)
+    ctrls_x[-1] = second_inflect_x - first_inflect_x
+    ctrls_y[-1] = second_inflect_y
+
+    sus_decay = generate_spline_curve(ctrls_x, ctrls_y, 0, 
+                                      second_inflect_x - first_inflect_x, 
+                                      second_inflect_x - first_inflect_x)
+    
+    # Release - same method as sustain/decay
+
+    ctrls_x = np.sort(randint(1, num_frames-second_inflect_x-1, 30))
+    ctrls_y = np.sort(randint(0, int(second_inflect_y*1000)-1, 30)*.001)[::-1]
+    ctrls_x[0], ctrls_y[0] = (0, second_inflect_y)
+    ctrls_x[-1], ctrls_y[-1] = (num_frames - second_inflect_x, 0)
+
+    release = generate_spline_curve(ctrls_x, ctrls_y, 0, 
+                                    num_frames - second_inflect_x, 
+                                    num_frames - second_inflect_x)
+
+    envelope = np.concatenate((attack, sus_decay, release))
+
+    # Smooth around inflections to get rid of harsh edges between random curves
+
+    # Clip the vector (make sure everything is between 0 and 1)
+    # envelope = np.clip(envelope)
+
+    #TODO: Maybe normalize the envelope rather than clip it?
+
+    return envelope[:, np.newaxis]
 
 
-def random_amplitude_envelope(sample):
-    # TODO: SPLINES
+def apply_random_amp_envelope(sample):
+    """
+        Apply a random amplitude envelope to the sample
+    """
     proc_sample = sample
     return proc_sample
 
@@ -273,8 +351,8 @@ def gate_audio(sample, framerate, raw_dtype):
         parts of the script. TODO: Time this function and compare it to
         other functions. This might be the first place to optimize.
     """
-    attack = .5
-    release = .9
+    attack = 0.4
+    release = 0.8
     envelope = 0.0
     gain = 1.0
 
@@ -313,12 +391,12 @@ def gate_audio(sample, framerate, raw_dtype):
     return sample
 
 
-def normalize_sample(sample, raw_dtype):
+def normalize_sample(sample, dtype):
     """Maximize sample amplitude."""
 
-    if raw_dtype == np.int16:
+    if dtype == np.int16:
         ratio = 32767/np.max(np.abs(sample))
-    elif raw_dtype == np.int32:  # 24 bit wav casts to 32 bit np array 
+    elif dtype == np.int32:  # 24 bit wav casts to 32 bit np array 
         ratio = 8388607/np.max(np.abs(sample)) # Treat max as 24 int signed limit
     
     normalized_sample = ratio * sample
@@ -327,9 +405,7 @@ def normalize_sample(sample, raw_dtype):
 
 
 def declick_sample(sample, framerate):
-    """Ramp up and ramp down the signal over the first and last 10 ms.
-       TODO: Consider splines over these linear windows.
-    """
+    """Ramp up and ramp down the signal over the first and last 10 ms."""
     num_frames = convert_ms_to_frames(10, framerate)
     ramp_up = np.linspace(0,1,num_frames)[:,np.newaxis]
     ramp_down = np.linspace(1,0,num_frames)[:,np.newaxis]
@@ -354,7 +430,7 @@ def main():
     check_wav(framerate, num_frames)
 
     # Generate random sample lengths between 250 and 3000 milliseconds
-    sample_lengths = np.random.randint(300, 3001, num_samps)
+    sample_lengths = randint(300, 3001, num_samps)
 
     # Generate random sample
     for idx, sample_length in enumerate(sample_lengths):
