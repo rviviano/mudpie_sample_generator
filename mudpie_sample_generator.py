@@ -23,7 +23,7 @@ from scipy.interpolate import BSpline, splrep
 from numpy.random import randint
 
 # No real rhyme or reason to this
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 # TODO: Implement tests
 # TODO: Implement embarrassingly parallel processing
