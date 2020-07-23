@@ -9,10 +9,10 @@
  These instructions will get you a copy of this project up and running on your system.
 
  ### Prerequisites 
- python https://www.python.org/
- numpy  https://numpy.org/
- scipy  https://www.scipy.org/
- wavio  https://pypi.org/project/wavio/
+ * python https://www.python.org/
+ * numpy  https://numpy.org/
+ * scipy  https://www.scipy.org/
+ * wavio  https://pypi.org/project/wavio/
 
  Tested with python 3.8 on Windows 10
 
@@ -26,12 +26,6 @@
 ## Usage
  mudpie_sample_generator.py is a commandline tool
 
- ### Mac/Linux Terminal
- ```
- mudpie_sample_generator.py --i <path to input wav> --o <directory to save output> --p <filename prefix for output samples> --n <number of samples to generate>
- ```
-
- ### Windows PowerShell
  ```
  python mudpie_sample_generator.py --i <path to input wav> --o <directory to save output> --p <filename prefix for output samples> --n <number of samples to generate>
  ```
