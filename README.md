@@ -63,10 +63,10 @@ Optional Options:
  * **Raymond Viviano** - *Initial Work* - https://github.com/rviviano
 
 ## License
- This project is licensed under the MIT License - see the [LICENSE.md](https://github.com/rviviano/mudpie-sample-generator/blob/master/LICENSE) file for details
+ This project is licensed under the MIT License - see the [LICENSE](https://github.com/rviviano/mudpie-sample-generator/blob/master/LICENSE) file for details
 
 ## Acknowledgments
  * **ill.Gates** - For coining the term "mudpie" in a sound design context
  * **Mr.Bill** - For helping to popularize the term in music production
 
- If the origin of the term goes further back then that though, please let me know. 
+ If the origin of the term "mudpie" in sound design circles goes further back then that though, please let me know. 
