@@ -23,10 +23,12 @@ from scipy.interpolate import BSpline, splrep
 from numpy.random import randint
 
 # No real rhyme or reason to this
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 # TODO: Implement tests
 # TODO: Implement embarrassingly parallel processing
+# NOTE: Because of the demean/detrend step, this script probably doesn't work 
+#       well with rectified waveforms
 
 # Class Definitions
 class WavError(Exception):
@@ -155,6 +157,7 @@ def load_wav(wave_filepath):
 
 
 def check_wav(framerate, num_frames):
+    # TODO: Reject 8-bit samples
     sample_length = convert_frames_to_ms(num_frames, framerate)
     if sample_length < 10000:
         raise WavError("Input wav needs to be longer than 10 seconds")
@@ -245,13 +248,12 @@ def bandpass_sample(sample, framerate):
     """
     # Convenience parameters
     nyquist = framerate * 0.5
-    lowcut = 30.0/nyquist
+    lowcut = 28.0/nyquist
     highcut = 18000.0/nyquist
     # Define the filter
     sos = butter(2, [lowcut, highcut], btype='bandpass', output='sos')
     # Bandpass the audio
     proc_sample = sosfiltfilt(sos, sample, axis=0)
-
     return proc_sample
 
 
@@ -361,15 +363,15 @@ def gate_audio(sample, framerate, raw_dtype):
         other functions. This might be the first place to optimize.
     """
     attack = 0.4
-    release = 0.8
+    release = 0.85
     envelope = 0.0
     gain = 1.0
 
     # Set threshold based on in/output bitdepth
     if raw_dtype == np.int16:
-        threshold = 1600.0 # TODO: This is still an untested threshold
+        threshold = 1500.0 # TODO: This is still an untested threshold
     else: # 24-bit
-        threshold = 20000.0
+        threshold = 15000.0
 
     for i in range(0, sample.shape[0]-1):
         # Calculate maxium absolute values across channels and cast to 
@@ -388,8 +390,8 @@ def gate_audio(sample, framerate, raw_dtype):
         # However, the actual gain applied by the limiter depends on the attack
         # This ensures a smooth onset of the noise gate
         gain = gain*attack + target_gain*(1-attack)
-        # If gain is < 1e-10, it's effectivly 0. Cap gain at 1. No boosting.
-        if gain < 0.0000000001:
+        # If gain is < 1e-8, it's effectivly 0. Cap gain at 1. No boosting.
+        if gain < 0.00000001:
             gain = 0.0
         elif gain > 1.0:
             gain = 1.0
@@ -414,8 +416,8 @@ def normalize_sample(sample, dtype):
 
 
 def declick_sample(sample, framerate):
-    """Ramp up and ramp down the signal over the first and last 10 ms."""
-    num_frames = convert_ms_to_frames(10, framerate)
+    """Ramp up and ramp down the signal over the first and last 20 ms."""
+    num_frames = convert_ms_to_frames(20, framerate)
     ramp_up = np.linspace(0,1,num_frames)[:,np.newaxis]
     ramp_down = np.linspace(1,0,num_frames)[:,np.newaxis]
     sample_start = sample[0:num_frames, :]
@@ -427,7 +429,12 @@ def declick_sample(sample, framerate):
 
 def main():
     """
-        TODO: Write this docstring
+        Load wav, check for issues, and pull random samples from the wav. 
+        Bandpass filters, gates, applies a random amplitude envelope, 
+        normalizes, detrends (possibly unnecessary), and declicks the samples
+        before writing them to wav. 
+
+        This script primarily works with audio
     """
     # Get input wav filepath and output specifications
     in_path, out_dir, prefix, num_samps = process_options()
@@ -453,35 +460,33 @@ def main():
         # Bandpass the audio
         proc_sample = bandpass_sample(raw_sample, framerate)
 
-        # Generate randomish amplitude envelope and apply to audio
-        proc_sample = apply_random_amp_envelope(proc_sample)
-
-        # Normalize the audio
-        proc_sample = normalize_sample(proc_sample, raw_sample.dtype)
-
         # Gate the Audio
         proc_sample = gate_audio(proc_sample, framerate, raw_sample.dtype)
+
+        # Generate randomish amplitude envelope and apply to audio
+        proc_sample = apply_random_amp_envelope(proc_sample)
 
         # Demean and detrend audio
         proc_sample = demean(proc_sample)
         proc_sample = detrend(proc_sample, axis=0)
+
+        # Normalize the audio
+        proc_sample = normalize_sample(proc_sample, raw_sample.dtype)
         
         # Declick the audio
         proc_sample = declick_sample(proc_sample, framerate)
 
-        # Cast np array to either 16bit int or 24bit int. The audio processing
-        # has occured with 64bit float precision up to this point.
-        proc_sample = proc_sample.astype(raw_sample.dtype, casting="unsafe")
-        
-        # Demean one final time - Maintain int dtype though.
-        proc_sample = demean(proc_sample)
+        # Write output to a wav file. The audio processing occured with 64bit 
+        # float precision. But will now typecast down to the original audio 
+        # type during write.
+        wavio.write(out_path, proc_sample, scale="none", rate=framerate, sampwidth=samplewidth)
 
-        # Write output to a wav file
-        wavio.write(out_path, proc_sample, rate=framerate, sampwidth=samplewidth)
+        # # Uncomment to compare filtering, etc. with raw random sample
+        # raw_path = join(abspath(out_dir), + prefix + "_raw_" + 
+        #                 zeropad_idx + ".wav")            
+        # wavio.write(raw_path, raw_sample, scale="none", rate=framerate, 
+        #             sampwidth=samplewidth)
 
-        # Temporary for comparing filtering, etc. with raw random sample
-        raw_path = join(abspath(out_dir), "_raw_" + zeropad_idx + ".wav")
-        wavio.write(raw_path, raw_sample, rate=framerate, sampwidth=samplewidth)
 
 if __name__ == "__main__":
     main()
