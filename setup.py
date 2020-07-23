@@ -8,5 +8,6 @@ setup(name='mudipie-sample-generator',
       author='Raymond Viviano',
       author_email='rayviviano@gmail.com',
       packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
+      scripts=["mudpie_sample_generator.py"],
       license='LICENSE.md',
     )
