@@ -10,7 +10,7 @@ setup(name='mudipie-sample-generator',
       packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
       entry_points = { 
             'console_scripts': [ 
-                'mudsampgen = mudpie_sample_generator:main'
+                'mudsampgen = mudpie_sample_generator.py:main'
             ] 
         }, 
       license='LICENSE.md',
