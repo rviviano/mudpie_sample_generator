@@ -3,6 +3,7 @@
 from setuptools import setup, find_packages
 
 def get_version():
+    # TODO: Test before using
     with open("mudpie_sample_generator.py", 'r') as f:
         for line in f:
             if "__version__" in line:
@@ -10,7 +11,7 @@ def get_version():
            
 
 setup(name='mudpie-sample-generator',
-      version=get_version(),
+      version="0.1.2",
       description='Extract random samples from wav file and save them.',
       author='Raymond Viviano',
       author_email='rayviviano@gmail.com',
