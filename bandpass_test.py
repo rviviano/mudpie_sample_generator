@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 
 # Define the bandpass filter
 nyquist = 44100 * 0.5
-lowcut = 28.0/nyquist
+lowcut = 36.0/nyquist
 highcut = 17500.0/nyquist 
-sos = signal.butter(3, [lowcut, highcut], btype='bandpass', output='sos')
+sos = signal.butter(2, [lowcut, highcut], btype='bandpass', output='sos')
 
 # Plot the frequency response
 w, h = signal.sosfreqz(sos, worN=16384)
