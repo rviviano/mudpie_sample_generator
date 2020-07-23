@@ -9,7 +9,7 @@ def get_version():
                 return line.split("=")[1].strip()
            
 
-setup(name='mudipie-sample-generator',
+setup(name='mudpie-sample-generator',
       version=get_version(),
       description='Extract random samples from wav file and save them.',
       author='Raymond Viviano',
