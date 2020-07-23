@@ -22,14 +22,20 @@
  From the command line (Mac/Linux Terminal or Windows PowerShell).
  
  ```
- python -m pip install git+https://github.com/rviviano/mudpie-sample-generator.git
+ python -m pip install git+https://github.com/rviviano/mudpie-sample-generator.git@v0.1.2
  ```
  
 ## Usage
- mudpie_sample_generator.py is a commandline tool
+ pip installs mudpie_sample_generator.py as a commandline tool (mudsampgen)
 
+ ### Linux/Mac
  ```
- python mudpie_sample_generator.py --i <path to input wav> --o <directory to save output> --p <filename prefix for output samples> --n <number of samples to generate>
+mudsampgen --i <path to input wav> --o <directory to save output> --p <filename prefix for output samples> --n <number of samples to generate>
+ ```
+
+ ### Windows
+  ```
+mudsampgen.exe --i <path to input wav> --o <directory to save output> --p <filename prefix for output samples> --n <number of samples to generate>
  ```
 
 ## Authors
