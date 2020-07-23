@@ -31,12 +31,12 @@
 
  ### Linux/Mac Terminal and Windows PowerShell
  ```
-mudsampgen --i <path to input wav> --o <directory to save output> --p <filename prefix for output samples> --n <number of samples to generate>
+mudsampgen --i <arg> --o <arg> --p <arg> --n <arg>
  ```
 
 or
 ```
-python -m mudpie_sample_generator --in <arg> --out <arg> --pre <arg> --num <arg> -h
+python -m mudpie_sample_generator --i <arg> --o <arg> --p <arg> --n <arg>
 ```
 
 #### Options Explanation
@@ -67,6 +67,6 @@ Optional Options:
 
 ## Acknowledgments
  * **ill.Gates** - For coining the term "mudpie" in a sound design context
- * **Mr.Bill** - For popularizing the term "mudpie" in music production
+ * **Mr.Bill** - For helping to popularize the term in music production
 
  If the origin of the term goes further back then that though, please let me know. 
