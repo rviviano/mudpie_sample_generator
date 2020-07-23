@@ -22,7 +22,7 @@
  From the command line (Mac/Linux Terminal or Windows PowerShell).
  
  ```
- python -m pip install git+https://github.com/rviviano/mudpie-sample-generator.git@v0.1.0
+ python -m pip install git+https://github.com/rviviano/mudpie-sample-generator.git
  ```
  
 ## Usage
