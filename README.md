@@ -15,6 +15,7 @@
  * numpy  https://numpy.org/
  * scipy  https://www.scipy.org/
  * wavio  https://pypi.org/project/wavio/
+ * pip    https://pypi.org/project/pip/
 
  Tested with python 3.8 on Windows 10
 
