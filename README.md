@@ -36,7 +36,7 @@
  * **Raymond Viviano** - *Initial Work* - https://github.com/rviviano
 
 ## License
- This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
+ This project is licensed under the MIT License - see the [LICENSE.md](https://github.com/rviviano/mudpie-sample-generator/blob/master/LICENSE) file for details
 
 ## Acknowledgments
  * **ill.Gates** - For coining the term "mudpie" in a sound design context
