@@ -1,6 +1,8 @@
 # Mudpie Sample Generator
  Automatically create a bunch of processed audio samples from a mudpie 
 
+ NOTE: ONLY WORKS WITH 16BIT and 24BIT WAV FILES AT THE MOMENT.
+
  A better name might have been "Mudpie Slicer" as the script doesn't generate mangled waveforms for you. Instead, the script takes an input wav file, pulls random samples between 300 and 3000 milliseconds, processes them, and then saves them as individual samples in the directory of your choosing. 
 
  Processing includes: bandpass filtering(20 Hz and 18 kHz), noise gating, random amplitude envelope generation, demeaning, detrending, normalization, and declicking.
