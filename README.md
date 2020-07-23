@@ -26,17 +26,37 @@
  ```
  
 ## Usage
- pip installs mudpie_sample_generator.py as a commandline tool (mudsampgen)
+ pip should install the command line tool **mudsampgen**
 
- ### Linux/Mac
+ ### Linux/Mac Terminal and Windows PowerShell
  ```
 mudsampgen --i <path to input wav> --o <directory to save output> --p <filename prefix for output samples> --n <number of samples to generate>
  ```
 
- ### Windows
-  ```
-mudsampgen.exe --i <path to input wav> --o <directory to save output> --p <filename prefix for output samples> --n <number of samples to generate>
- ```
+or
+```
+python -m mudpie_sample_generator --in <arg> --out <arg> --pre <arg> --num <arg> -h
+```
+
+#### Options Explanation
+Mandatory Options:
+
+    --i, --in      
+        The mudpie, must be 16- or 24-bit int wav. No 32float yet. Also, it needs to be *much* longer than 10 seconds in length; otherwise, there is not much point in running this script.
+
+    --o, --out     
+        Directory to save output wavs to. If the provided directory path does not exist, then the script will try to create it.
+
+    --p, --pre     
+        Filename prefix for all output wav samples.
+
+    --n, --num     
+        Number of samples to generate (Maxes out at 400).
+
+    Optional Options:
+
+    -h             
+        Print this usage message and exit
 
 ## Authors
  * **Raymond Viviano** - *Initial Work* - https://github.com/rviviano

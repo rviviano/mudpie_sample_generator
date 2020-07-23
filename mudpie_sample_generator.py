@@ -56,8 +56,8 @@ def process_options():
     # Define usage
     usage = """
 
-    Usage: python mudpie-sample-generator.py --in <arg> --out <arg> --pre <arg> 
-                                             --num <arg> -h
+    Usage: python mudpie_sample_generator --in <arg> --out <arg> --pre <arg> 
+                                          --num <arg> -h
 
     Mandatory Options:
 
